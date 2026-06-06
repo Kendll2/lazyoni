@@ -9,8 +9,8 @@ def get_headers(referer=None):
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
         "Accept": "*/*",
-        "Referer": referer or "https://2i4.d72577a9dd0ec71.cfd/",
-        "Origin": "https://2i4.d72577a9dd0ec71.cfd"
+        "Referer": referer or "https://inattv1312.xyz/",
+        "Origin": "https://inattv1312.xyz/"
     }
 
 # -------------------------
