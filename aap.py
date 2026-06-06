@@ -12,14 +12,15 @@ def get_headers(referer):
         "Referer": referer,
         "Origin": referer.rstrip('/'),
         "Connection": "keep-alive",
-        "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
     }
 
 @app.route("/proxy/stream")
 def stream_proxy():
     m3u8_url = request.args.get("d")
-    if not m3u8_url or not m3u8_url.startswith("https://"):
-        return "Invalid or missing ?d= parameter", 400
+    if not m3u8_url:
+        return "Missing ?d= m3u8 URL", 400
+
+    print(f"[LOG] Playlist requested: {m3u8_url}")  # HF log için
 
     referer = urlparse(m3u8_url).scheme + "://" + urlparse(m3u8_url).netloc + "/"
     headers = get_headers(referer)
@@ -28,10 +29,12 @@ def stream_proxy():
     session.headers.update(headers)
 
     try:
-        r = session.get(m3u8_url, timeout=15)
+        r = session.get(m3u8_url, timeout=12, allow_redirects=True)
         r.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return f"Playlist fetch failed: {str(e)}", 502
+        print(f"[LOG] Playlist fetched: {r.status_code}")
+    except Exception as e:
+        print(f"[ERROR] Playlist fetch failed: {str(e)}")
+        return f"Cannot connect to source: {str(e)}", 502
 
     content = r.text
     lines = []
@@ -45,10 +48,7 @@ def stream_proxy():
         if line.startswith("#"):
             lines.append(line)
         else:
-            if line.startswith(("http://", "https://")):
-                segment_url = line
-            else:
-                segment_url = urljoin(base_url, line)
+            segment_url = line if line.startswith(("http://", "https://")) else urljoin(base_url, line)
             lines.append(f"/proxy/segment?url={segment_url}")
 
     return Response("\n".join(lines), content_type="application/vnd.apple.mpegurl")
@@ -69,24 +69,19 @@ def segment_proxy():
     try:
         r = session.get(url, stream=True, timeout=15)
         r.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return f"Segment fetch failed: {str(e)}", 502
+    except Exception as e:
+        print(f"[ERROR] Segment failed {url}: {str(e)}")
+        return f"Segment error: {str(e)}", 502
 
     def generate():
-        try:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    yield chunk
-        except Exception:
-            pass  # bağlantı kesilirse sessizce bitir
+        for chunk in r.iter_content(chunk_size=16384):
+            if chunk:
+                yield chunk
 
     return Response(
         generate(),
         content_type=r.headers.get("Content-Type", "video/mp2t"),
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-cache"
-        }
+        headers={"Access-Control-Allow-Origin": "*"}
     )
 
 
