@@ -8,7 +8,6 @@ app = Flask(__name__)
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 ]
 
 def get_headers(referer):
@@ -16,15 +15,9 @@ def get_headers(referer):
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "application/vnd.apple.mpegurl, */*",
         "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
         "Referer": referer,
         "Origin": referer.rstrip('/'),
         "Connection": "keep-alive",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "Pragma": "no-cache",
-        "Cache-Control": "no-cache",
     }
 
 @app.route("/proxy/stream")
@@ -34,26 +27,20 @@ def stream_proxy():
         return "Missing ?d= parameter", 400
 
     print(f"[LOG] Playlist: {m3u8_url}")
-
-    referer = "https://inattv1312.xyz/"   # Ana site refereri
+    referer = "https://inattv1312.xyz/"
     headers = get_headers(referer)
 
     session = requests.Session()
     session.headers.update(headers)
 
     try:
-        r = session.get(m3u8_url, timeout=20, allow_redirects=True)
-        print(f"[LOG] Status: {r.status_code} - {r.reason}")
-        
-        if r.status_code == 403:
-            return "403 Forbidden - Site koruması çok güçlü.", 403
-            
+        r = session.get(m3u8_url, timeout=20)
+        print(f"[LOG] Status: {r.status_code} {r.reason}")
         r.raise_for_status()
     except Exception as e:
         print(f"[ERROR] {str(e)}")
         return f"Cannot connect to source: {str(e)}", 502
 
-    # M3U8 içeriğini proxy için yeniden yaz
     content = r.text
     lines = []
     base_url = m3u8_url.rsplit('/', 1)[0] + '/'
@@ -78,8 +65,7 @@ def segment_proxy():
     if not url:
         return "Missing url", 400
 
-    referer = "https://inattv1312.xyz/"
-    headers = get_headers(referer)
+    headers = get_headers("https://inattv1312.xyz/")
 
     session = requests.Session()
     session.headers.update(headers)
@@ -89,18 +75,14 @@ def segment_proxy():
         r.raise_for_status()
     except Exception as e:
         print(f"[Segment Error] {str(e)}")
-        return "Segment fetch failed", 502
+        return "Segment failed", 502
 
     def generate():
         for chunk in r.iter_content(chunk_size=16384):
             if chunk:
                 yield chunk
 
-    return Response(
-        generate(),
-        content_type=r.headers.get("Content-Type", "video/mp2t"),
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
+    return Response(generate(), content_type="video/mp2t", headers={"Access-Control-Allow-Origin": "*"})
 
 
 if __name__ == "__main__":
