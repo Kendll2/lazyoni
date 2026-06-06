@@ -4,70 +4,78 @@ from urllib.parse import urljoin, urlparse
 
 app = Flask(__name__)
 
-ORIGIN = "https://2i4.d72577a9dd0ec71.cfd/b2/mono.m3u8"
-
-# Önemli: Referer buraya doğru siteyi koy
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Referer": "https://inattv1312.xyz",   # ← Burayı doğru referer ile değiştir
-    "Origin": "https://inattv1312.xyz"
-}
+# Varsayılan Headers (Referer çok önemli!)
+def get_headers(referer=None):
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Referer": referer or "https://2i4.d72577a9dd0ec71.cfd/",
+        "Origin": "https://2i4.d72577a9dd0ec71.cfd"
+    }
 
 # -------------------------
-# M3U8 PLAYLIST PROXY
+# Dinamik Playlist Proxy
 # -------------------------
-@app.route("/live/<path:playlist>")
-def playlist_proxy(playlist):
-    url = urljoin(ORIGIN, playlist)
-    
-    r = requests.get(url, headers=HEADERS, timeout=20)
-    
-    if r.status_code != 200:
-        return Response(r.text, status=r.status_code, content_type=r.headers.get("Content-Type"))
+@app.route("/proxy/stream")
+def stream_proxy():
+    m3u8_url = request.args.get("d")
+    if not m3u8_url:
+        return "Missing ?d= parameter (m3u8 URL)", 400
+
+    # Güvenlik kontrolü (sadece https ve belirli domainler)
+    if not m3u8_url.startswith("https://"):
+        return "Only HTTPS URLs are allowed", 403
+
+    headers = get_headers(referer=urlparse(m3u8_url).scheme + "://" + urlparse(m3u8_url).netloc + "/")
+
+    try:
+        r = requests.get(m3u8_url, headers=headers, timeout=20)
+        r.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return f"Error fetching playlist: {str(e)}", 502
 
     content = r.text
     lines = []
 
+    base_url = m3u8_url.rsplit('/', 1)[0] + '/'  # m3u8'in klasörü
+
     for line in content.splitlines():
         line = line.strip()
         if not line:
-            lines.append(line)
+            lines.append("")
             continue
-            
         if line.startswith("#"):
             lines.append(line)
         else:
-            # Mutlak URL mi yoksa göreli mi kontrol et
-            if line.startswith("http://") or line.startswith("https://"):
+            # Mutlak veya göreli URL'yi tam URL'ye çevir
+            if line.startswith(("http://", "https://")):
                 segment_url = line
             else:
-                segment_url = urljoin(url, line)  # base URL'e göre birleştir
+                segment_url = urljoin(base_url, line)
             
             # Kendi proxy'ine yönlendir
-            lines.append(f"/segment?url={segment_url}")
-    
+            lines.append(f"/proxy/segment?url={segment_url}")
+
     modified = "\n".join(lines)
     return Response(modified, content_type="application/vnd.apple.mpegurl")
 
 
 # -------------------------
-# SEGMENT PROXY
+# Segment Proxy
 # -------------------------
-@app.route("/segment")
+@app.route("/proxy/segment")
 def segment_proxy():
     url = request.args.get("url")
     if not url:
-        return "Missing URL parameter", 400
+        return "Missing url parameter", 400
 
-    # Güvenlik: Sadece ORIGIN domain'inden gelen istekleri kabul et (opsiyonel)
-    if not url.startswith("https://2i4.d72577a9dd0ec71.cfd"):
-        return "Invalid URL", 403
+    headers = get_headers(referer=urlparse(url).netloc)
 
-    r = requests.get(url, headers=HEADERS, stream=True, timeout=20)
-    
-    if r.status_code != 200:
-        return Response(r.content, status=r.status_code)
+    try:
+        r = requests.get(url, headers=headers, stream=True, timeout=20)
+        r.raise_for_status()
+    except requests.exceptions.RequestException:
+        return "Failed to fetch segment", 502
 
     def generate():
         for chunk in r.iter_content(chunk_size=8192):
@@ -86,4 +94,4 @@ def segment_proxy():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7860, debug=True)
+    app.run(host="0.0.0.0", port=7860, debug=False)
