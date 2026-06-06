@@ -9,6 +9,7 @@ STREAM_URL = "https://2i4.d72577a9dd0ec71.cfd/b2/mono.m3u8"
 def live(channel_uid):
     headers = {
         "User-Agent": "Mozilla/5.0",
+        "Referer": "https://inattv1312.xyz/",
         "Accept": "*/*"
     }
 
