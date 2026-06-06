@@ -28,7 +28,7 @@ def stream_proxy():
 
     print(f"[LOG] Trying playlist: {m3u8_url}")
 
-    referer = "https://2i4.d72577a9dd0ec71.cfd/"  
+    referer = "https://inattv1312.xyz/"  
     headers = get_headers(referer)
 
     session = requests.Session()
@@ -72,7 +72,7 @@ def segment_proxy():
     if not url:
         return "Missing url", 400
 
-    referer = "https://2i4.d72577a9dd0ec71.cfd/"
+    referer = "https://inattv1312.xyz/"
     headers = get_headers(referer)
 
     session = requests.Session()
